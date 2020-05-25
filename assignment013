@@ -1,0 +1,134 @@
+class DoesNotExist(Exception):
+    pass
+
+class MultipleObjectsReturned(Exception):
+    pass
+
+class InvalidField(Exception):
+    pass
+
+class Student:
+    def __init__(self,name,age,score):
+        self.name=name
+        self.age=age
+        self.score=score
+        self.student_id=None
+    
+    def __repr__(self):
+        return "Student(student_id={}, name={}, age={}, score={})".format(
+            self.student_id,
+            self.name,
+            self.age,
+            self.score)
+
+     
+    @staticmethod
+    def get(**kwargs):
+        list=['student_id','name','age','score']
+        for key,value in kwargs.items():
+            if key == 'name':
+                queries="select * from Student where {} = \'{}\' ".format(key,value)
+            elif key in list:
+                queries="select * from Student where {} = {}".format(key,value)
+            else:
+                raise InvalidField
+    
+        outer=read_data(queries)
+        print(queries)
+        
+        if len(outer)==0:
+            raise DoesNotExist
+            
+        elif len(outer)>1:
+            raise MultipleObjectsReturned
+        else:
+            val=Student(outer[0][1],outer[0][2],outer[0][3])
+            val.student_id=outer[0][0]
+            return val
+            
+    def save(self):
+        import sqlite3
+        connection = sqlite3.connect("selected_students.sqlite3")
+        crsr = connection.cursor() 
+        crsr.execute("PRAGMA foreign_keys=on;")
+        if self.student_id == None:
+            crsr.execute("insert into Student(name,age,score) values(\'{}\',{},{})".format(self.name,self.age,self.score))
+            self.student_id=crsr.lastrowid
+        else:
+            dt=read_data("select * from Student where student_id={}".format(self.student_id))
+            if len(dt)!=0:
+                crsr.execute(f"update Student set name=\'{self.name}\', age = {self.age}, score = {self.score}")
+            else:
+                crsr.execute("insert into Student(student_id,name,age,score) values({},\'{}\',{},{})".format(self.student_id,self.name,self.age,self.score)) 
+            
+        connection.commit() 
+        connection.close()
+        
+    @staticmethod
+    def filter(**kwargs):
+        result = []
+        import sqlite3
+        connection = sqlite3.connect("selected_students.sqlite3")
+        crsr = connection.cursor() 
+        crsr.execute("PRAGMA foreign_keys=on;")
+        list1=['student_id','name','age','score']
+        for key,value in kwargs.items():
+            key1=key.split('__')
+            
+            if key1[0] not in list1:
+                raise InvalidField
+            if  key in list1:
+                crsr.execute("select * from Student where {} = '{}'".format(key,value))
+            else:
+               op = key.split('__') 
+               if op[1]=='lt':
+                 crsr.execute("select * from Student where {} < {}".format(op[0],value))
+               elif op[1] =='lte':
+                 crsr.execute("select * from Student where {} <= {}".format(op[0],value))
+               elif op[1]=='gt':
+                 crsr.execute("select * from Student where {} > {}".format(op[0],value))
+               elif op[1]=='gte':
+                 crsr.execute("select * from Student where {} >= {}".format(op[0],value))
+               elif op[1]=='neq':
+                 crsr.execute("select * from Student where {} != '{}'".format(op[0],value))
+               elif  op[1]== 'in':
+                 l=tuple(value)
+                 crsr.execute("select * from Student where {} in {}".format(op[0],l))
+               elif op[1]== 'contains':
+                 crsr.execute(f"select * from Student where {op[0]} like '%{value}%'")
+            
+             
+            c=crsr.fetchall()     
+            #print(c)
+            for i in range(len(c)):
+               st=Student(c[i][1],c[i][2],c[i][3])
+               st.student_id=c[i][0]
+               result.append(st)
+            connection.commit()
+            connection.close()
+        return result
+        
+    def delete(self):
+        query="delete from Student where student_id={}".format(self.student_id)
+        write_data(query)
+
+
+def write_data(sql_query):
+	import sqlite3
+	connection = sqlite3.connect("selected_students.sqlite3")
+	crsr = connection.cursor() 
+	crsr.execute("PRAGMA foreign_keys=on;") 
+	crsr.execute(sql_query) 
+	connection.commit() 
+	connection.close()
+
+
+def read_data(sql_query):
+	import sqlite3
+	connection = sqlite3.connect("selected_students.sqlite3")
+	crsr = connection.cursor() 
+	crsr.execute(sql_query) 
+	ans= crsr.fetchall()  
+	connection.close() 
+	return ans
+	
